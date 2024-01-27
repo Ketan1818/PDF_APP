@@ -4,16 +4,15 @@ const mongoose = require('mongoose');
 const multer = require('multer');
 const { PDFDocument } = require('pdf-lib');
 const cors = require('cors');
-const fs = require('fs'); 
-const app = express();
+const fs = require('fs');
 const path = require('path');
+const app = express();
 
 app.use(cors());
 
 mongoose.connect('mongodb://127.0.0.1:27017/PDF_COLLECTION')
     .then(() => console.log('DB successfully connected'))
     .catch((err) => console.log('Error in DB connection'));
-
 
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
@@ -22,7 +21,7 @@ if (!fs.existsSync(uploadsDir)) {
 
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'uploads/'); 
+        cb(null, 'uploads/');
     },
     filename: function (req, file, cb) {
         cb(null, Date.now() + path.extname(file.originalname));
@@ -36,18 +35,10 @@ const PdfRecordSchema = new mongoose.Schema({
         required: true
     },
     filePath: {
-        type: String, 
+        type: String,
         required: true
     },
     createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    modifiedAt: {
-        type: Date,
-        default: Date.now
-    },
-    signed: {
         type: Date,
         default: Date.now
     }
@@ -57,12 +48,10 @@ const PdfRecord = mongoose.model('PdfRecord', PdfRecordSchema);
 
 app.post('/upload', upload.single('pdfFile'), async (req, res) => {
     try {
-        const { originalname, filename } = req.file;    
+        const { originalname, filename } = req.file;
         const filePath = path.join('uploads', filename);
-
-     const pdfRecord = new PdfRecord({ filename: originalname, filePath: filePath });
-    await pdfRecord.save();
-
+        const pdfRecord = new PdfRecord({ filename: originalname, filePath: filePath });
+        await pdfRecord.save();
         res.send('File uploaded successfully');
     } catch (error) {
         console.error('Error uploading file:', error);
@@ -70,16 +59,13 @@ app.post('/upload', upload.single('pdfFile'), async (req, res) => {
     }
 });
 
-
-
 app.get('/download/:id', async (req, res) => {
     try {
         const pdfRecord = await PdfRecord.findById(req.params.id);
         if (!pdfRecord) {
             return res.status(404).send('PDF not found');
         }
-
-        const filePath = path.join(__dirname, pdfRecord.filePath); 
+        const filePath = path.join(__dirname, pdfRecord.filePath);
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${pdfRecord.filename}"`);
         res.sendFile(filePath);
@@ -89,17 +75,13 @@ app.get('/download/:id', async (req, res) => {
     }
 });
 
-
 app.get('/view/:id', async (req, res) => {
     try {
         const pdfRecord = await PdfRecord.findById(req.params.id);
-
         if (!pdfRecord) {
             return res.status(404).send('PDF not found');
         }
-
         const filePath = path.join(__dirname, pdfRecord.filePath);
-
         res.setHeader('Content-Type', 'application/pdf');
         res.sendFile(filePath);
     } catch (error) {
@@ -108,31 +90,61 @@ app.get('/view/:id', async (req, res) => {
     }
 });
 
-
-app.put('/update/:id', upload.single('pdfFile'), async (req, res) => {
+app.put('/add-signature/:id', async (req, res) => {
     try {
         const pdfRecord = await PdfRecord.findById(req.params.id);
         if (!pdfRecord) {
             return res.status(404).send('PDF not found');
         }
 
-      
-        fs.unlinkSync(path.join(__dirname, pdfRecord.filePath));
+        const existingPdfBytes = fs.readFileSync(path.join(__dirname, pdfRecord.filePath));
+        const pdfDoc = await PDFDocument.load(existingPdfBytes);
+        const [page] = pdfDoc.getPages();
+        const { signatureData } = req.body;
 
-  
-        const { originalname, filename } = req.file;
-        const filePath = path.join('uploads', filename);
-        pdfRecord.filename = originalname;
-        pdfRecord.filePath = filePath;
-        await pdfRecord.save();
+        signatureData.forEach(({ color, curve }) => {
+            page.getOperatorList()
+                .addOp({
+                    opcode: 'SAVE',
+                    operands: [],
+                })
+                .addOp({
+                    opcode: 'GRESTORE',
+                    operands: [],
+                })
+                .addOp({
+                    opcode: 'G',
+                    operands: [color.r, color.g, color.b],
+                })
+                .addOp({
+                    opcode: 'w',
+                    operands: [2],
+                });
+            page.getOperatorList().addOp({
+                opcode: 'm',
+                operands: [curve[0].x, curve[0].y],
+            });
+            curve.slice(1).forEach((point) => {
+                page.getOperatorList().addOp({
+                    opcode: 'l',
+                    operands: [point.x, point.y],
+                });
+            });
+            page.getOperatorList().addOp({
+                opcode: 'S',
+                operands: [],
+            });
+        });
 
-        res.send('File updated successfully');
+        const modifiedPdfBytes = await pdfDoc.save();
+        fs.writeFileSync(path.join(__dirname, pdfRecord.filePath), modifiedPdfBytes);
+
+        res.send('Signature added successfully');
     } catch (error) {
-        console.error('Error updating file:', error);
+        console.error('Error adding signature:', error);
         res.status(500).send('Internal Server Error');
     }
 });
-
 
 app.get('/pdfrecords', async (req, res) => {
     try {

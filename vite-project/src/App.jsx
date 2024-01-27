@@ -35,6 +35,8 @@ function App() {
             });
             console.log('File uploaded successfully');
             fetchPdfRecords();
+            alert('File uploaded successfully')
+            window.location.reload();
         } catch (error) {
             console.error('Error uploading file:', error);
         }
@@ -75,7 +77,6 @@ function App() {
      
         const input = document.createElement('input');
         input.type = 'file';
-
         input.addEventListener('change', async () => {
          
             if (input.files && input.files.length > 0) {
@@ -92,6 +93,8 @@ function App() {
                     });
                     console.log('File updated successfully');
                     fetchPdfRecords(); 
+                    alert('Updated')
+                    window.location.reload();
                 } catch (error) {
                     console.error('Error updating file:', error);
                 }

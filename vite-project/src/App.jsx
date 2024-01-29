@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './App.css'
+
 function App() {
     const [file, setFile] = useState(null);
     const [pdfRecords, setPdfRecords] = useState([]);
-    const [pdfUrl, setPdfUrl] = useState(null);
+  
 
     useEffect(() => {
         fetchPdfRecords();
@@ -41,6 +42,8 @@ function App() {
             console.error('Error uploading file:', error);
         }
     };
+
+
 
     const handleDownload = async (id) => {
         try {
@@ -104,6 +107,9 @@ function App() {
      
         input.click();
     };
+ 
+    
+    
     
 
     return (
@@ -125,16 +131,14 @@ function App() {
                             <span>Modified time : {record.modifiedAt}</span><br />
                             <button onClick={() => handleDownload(record._id) }className='btn1'>Download</button>
                             <button onClick={() => handleView(record._id)}className='btn1'>View</button>
+                          
                             <button onClick={() => handleUpdate(record._id)}className='btn1'>Update</button>
-                            {pdfUrl && pdfUrl === `http://localhost:5000/view/${record._id}` && (
-                                <div>
-                                    <iframe src={pdfUrl} width="100%" height="600px" title="PDF Viewer"></iframe>
-                                </div>
-                            )}
+                           
                         </li>
                     ))}
                 </ul>
             </div>
+           
         </>
     );
 }

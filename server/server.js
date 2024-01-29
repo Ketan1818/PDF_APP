@@ -2,13 +2,14 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const multer = require('multer');
-const { PDFDocument } = require('pdf-lib');
+const { PDFDocument,rgb } = require('pdf-lib');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const app = express();
 
 app.use(cors());
+
 
 mongoose.connect('mongodb://127.0.0.1:27017/PDF_COLLECTION')
     .then(() => console.log('DB successfully connected'))
@@ -90,62 +91,27 @@ app.get('/view/:id', async (req, res) => {
     }
 });
 
-app.put('/add-signature/:id', async (req, res) => {
+
+app.put('/update/:id', upload.single('pdfFile'), async (req, res) => {
     try {
         const pdfRecord = await PdfRecord.findById(req.params.id);
         if (!pdfRecord) {
             return res.status(404).send('PDF not found');
-        }
+        }  
+        fs.unlinkSync(path.join(__dirname, pdfRecord.filePath)); 
+        const { originalname, filename } = req.file;
+        const filePath = path.join('uploads', filename);
+        pdfRecord.filename = originalname;
+        pdfRecord.filePath = filePath;
+        await pdfRecord.save();
 
-        const existingPdfBytes = fs.readFileSync(path.join(__dirname, pdfRecord.filePath));
-        const pdfDoc = await PDFDocument.load(existingPdfBytes);
-        const [page] = pdfDoc.getPages();
-        const { signatureData } = req.body;
-
-        signatureData.forEach(({ color, curve }) => {
-            page.getOperatorList()
-                .addOp({
-                    opcode: 'SAVE',
-                    operands: [],
-                })
-                .addOp({
-                    opcode: 'GRESTORE',
-                    operands: [],
-                })
-                .addOp({
-                    opcode: 'G',
-                    operands: [color.r, color.g, color.b],
-                })
-                .addOp({
-                    opcode: 'w',
-                    operands: [2],
-                });
-            page.getOperatorList().addOp({
-                opcode: 'm',
-                operands: [curve[0].x, curve[0].y],
-            });
-            curve.slice(1).forEach((point) => {
-                page.getOperatorList().addOp({
-                    opcode: 'l',
-                    operands: [point.x, point.y],
-                });
-            });
-            page.getOperatorList().addOp({
-                opcode: 'S',
-                operands: [],
-            });
-        });
-
-        const modifiedPdfBytes = await pdfDoc.save();
-        fs.writeFileSync(path.join(__dirname, pdfRecord.filePath), modifiedPdfBytes);
-
-        res.send('Signature added successfully');
+        res.send('File updated successfully');
+        
     } catch (error) {
-        console.error('Error adding signature:', error);
+        console.error('Error updating file:', error);
         res.status(500).send('Internal Server Error');
     }
 });
-
 app.get('/pdfrecords', async (req, res) => {
     try {
         const pdfRecords = await PdfRecord.find();
@@ -155,6 +121,8 @@ app.get('/pdfrecords', async (req, res) => {
         res.status(500).send('Internal Server Error');
     }
 });
+
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
